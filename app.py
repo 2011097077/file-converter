@@ -19,7 +19,7 @@ from googleapiclient.http import MediaFileUpload
 UPLOAD_FOLDER = 'uploads'
 LOG_FILE = 'conversion_logs.csv'
 GOOGLE_CREDENTIALS_FILE = 'credentials.json'  # 서비스 계정 키 파일
-GOOGLE_FOLDER_ID = '여기에_당신의_폴더_ID_입력'  # Google Drive 폴더 ID
+GOOGLE_FOLDER_ID = '1GV7VOGpamzVwcflXSbXS9083Ydt2d4yV'  # Google Drive 폴더 ID
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
