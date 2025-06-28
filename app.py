@@ -207,4 +207,6 @@ def download_file(filename):
     return "파일이 존재하지 않습니다.", 404
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Render가 제공하는 포트 사용
+    app.run(host='0.0.0.0', port=port)        # 외부에서 접근 가능하게 설정
