@@ -3,12 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <title>파일 변환기</title>
+
+    <!-- 구글 애드센스 광고 스크립트 -->
+    <script data-ad-client="{{ ads_client }}" async
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
     <style>
         body {
             background-color: #e6f2ff;
             font-family: Arial, sans-serif;
             padding: 30px;
             text-align: center;
+
+            /* 좌우 광고 때문에 좌우 여유 공간 확보 */
+            margin-left: 140px;
+            margin-right: 140px;
+            position: relative;
+            min-height: 100vh;
+            padding-bottom: 80px; /* 하단 광고 공간 확보 */
         }
         .container {
             background-color: #ffffff;
@@ -16,6 +28,8 @@
             border-radius: 15px;
             box-shadow: 0px 0px 10px #ccc;
             display: inline-block;
+            max-width: 600px;
+            width: 100%;
         }
         input, select {
             margin: 10px;
@@ -35,7 +49,32 @@
             color: red;
             font-weight: bold;
         }
+
+        /* 광고 박스 공통 스타일 */
+        #left-ad, #right-ad {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 120px;
+            z-index: 1000;
+        }
+        #left-ad {
+            left: 0;
+        }
+        #right-ad {
+            right: 0;
+        }
+        #bottom-ad {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            margin-bottom: 10px;
+            z-index: 1000;
+        }
     </style>
+
     <script>
         function updateExtensionOptions() {
             const extMap = {
@@ -69,6 +108,46 @@
     </script>
 </head>
 <body>
+
+    <!-- 좌측 광고 -->
+    <div id="left-ad">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="{{ ads_client }}"
+             data-ad-slot="{{ ads_slots.left }}"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
+
+    <!-- 우측 광고 -->
+    <div id="right-ad">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="{{ ads_client }}"
+             data-ad-slot="{{ ads_slots.right }}"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
+
+    <!-- 하단 광고 -->
+    <div id="bottom-ad">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="{{ ads_client }}"
+             data-ad-slot="{{ ads_slots.bottom }}"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
+
     <div class="container">
         <h1>파일 변환기</h1>
         {% with messages = get_flashed_messages() %}
@@ -84,5 +163,6 @@
             <button type="submit">변환하기</button>
         </form>
     </div>
+
 </body>
 </html>
