@@ -1,213 +1,137 @@
 import os
-import csv
-import datetime
-import traceback
-import uuid
-import time
-from flask import Flask, request, send_file, jsonify, render_template
+from flask import Flask, request, render_template, send_file, redirect, flash
 from werkzeug.utils import secure_filename
-from PIL import Image
-from docx import Document
 import pandas as pd
-import magic
-import fitz  # PyMuPDF
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from PIL import Image
+from fpdf import FPDF
+from docx import Document
 
-# === 설정 ===
+app = Flask(__name__)
+app.secret_key = "supersecretkey"
+
 UPLOAD_FOLDER = 'uploads'
-LOG_FILE = 'conversion_logs.csv'
-GOOGLE_CREDENTIALS_FILE = 'credentials.json'  # 서비스 계정 키 파일
-GOOGLE_FOLDER_ID = '1GV7VOGpamzVwcflXSbXS9083Ydt2d4yV'  # Google Drive 폴더 ID
+ALLOWED_EXTENSIONS = {
+    'csv': ['xlsx', 'txt'],
+    'xlsx': ['csv', 'txt'],
+    'png': ['jpg', 'pdf'],
+    'jpg': ['png', 'pdf'],
+    'docx': ['txt'],
+}
+BLOCKED_EXTENSIONS = ['exe', 'sh', 'bat', 'js']
+MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def cleanup_old_files():
-    now = time.time()
-    for filename in os.listdir(UPLOAD_FOLDER):
-        path = os.path.join(UPLOAD_FOLDER, filename)
-        if os.path.isfile(path) and now - os.path.getmtime(path) > 86400:
-            os.remove(path)
-cleanup_old_files()
-
-ALLOWED_EXTENSIONS = {
-    'jpg', 'jpeg', 'png', 'pdf',
-    'doc', 'docx', 'odt', 'rtf', 'txt',
-    'xls', 'xlsx', 'csv',
-    'ppt', 'pptx',
-    'hwp', 'md', 'xml'
-}
-
-EXTENSION_MAP = {
-    'jpg': ['pdf', 'png'],
-    'jpeg': ['pdf', 'png'],
-    'png': ['pdf', 'jpg'],
-    'pdf': ['txt'],
-    'doc': ['pdf', 'txt'],
-    'docx': ['pdf', 'txt'],
-    'odt': ['pdf', 'txt'],
-    'rtf': ['pdf', 'txt'],
-    'txt': ['pdf'],
-    'xls': ['csv', 'pdf'],
-    'xlsx': ['csv'],
-    'csv': ['xlsx'],
-    'ppt': ['pdf'],
-    'pptx': ['pdf'],
-    'hwp': ['pdf'],
-    'md': ['pdf', 'txt'],
-    'xml': ['pdf', 'txt'],
-}
-
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
-
-# === Google Drive 업로드 ===
-def upload_to_drive(filepath, filename, folder_id=None):
-    credentials = service_account.Credentials.from_service_account_file(
-        GOOGLE_CREDENTIALS_FILE,
-        scopes=['https://www.googleapis.com/auth/drive.file']
-    )
-    service = build('drive', 'v3', credentials=credentials)
-    file_metadata = {'name': filename}
-    if folder_id:
-        file_metadata['parents'] = [folder_id]
-    media = MediaFileUpload(filepath, resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    return file.get('webViewLink')
-
-# === MIME 검사 ===
-def allowed_file_mime(file_stream, filename):
-    allowed_mimes = {
-        'jpg': ['image/jpeg'],
-        'jpeg': ['image/jpeg'],
-        'png': ['image/png'],
-        'pdf': ['application/pdf'],
-        'doc': ['application/msword'],
-        'docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        'odt': ['application/vnd.oasis.opendocument.text'],
-        'rtf': ['application/rtf', 'text/rtf'],
-        'txt': ['text/plain'],
-        'xls': ['application/vnd.ms-excel'],
-        'xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'application/octet-stream'],
-        'csv': ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'],
-        'ppt': ['application/vnd.ms-powerpoint'],
-        'pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
-        'hwp': ['application/x-hwp', 'application/octet-stream'],
-        'md': ['text/markdown', 'text/plain'],
-        'xml': ['application/xml', 'text/xml'],
-    }
+def allowed_file(filename):
     ext = filename.rsplit('.', 1)[-1].lower()
-    file_stream.seek(0)
-    mime = magic.from_buffer(file_stream.read(2048), mime=True)
-    file_stream.seek(0)
-    return mime in allowed_mimes.get(ext, [])
+    return '.' in filename and ext not in BLOCKED_EXTENSIONS
 
-# === 변환 함수 ===
-def convert_csv_to_xlsx(input_path, output_path):
-    pd.read_csv(input_path, encoding='utf-8').to_excel(output_path, index=False)
+def get_possible_conversions(ext):
+    return ALLOWED_EXTENSIONS.get(ext, [])
 
-def convert_xlsx_to_csv(input_path, output_path):
-    pd.read_excel(input_path).to_csv(output_path, index=False)
+def convert_file(filepath, original_ext, target_ext):
+    try:
+        if original_ext == 'csv' and target_ext == 'xlsx':
+            df = pd.read_csv(filepath)
+            new_path = filepath.replace('.csv', '.xlsx')
+            df.to_excel(new_path, index=False)
+            return new_path
 
-def convert_image_to_pdf(input_path, output_path):
-    img = Image.open(input_path)
-    img.convert('RGB').save(output_path, "PDF")
+        elif original_ext == 'xlsx' and target_ext == 'csv':
+            df = pd.read_excel(filepath)
+            new_path = filepath.replace('.xlsx', '.csv')
+            df.to_csv(new_path, index=False)
+            return new_path
 
-def convert_image_to_jpg(input_path, output_path):
-    img = Image.open(input_path)
-    img.convert('RGB').save(output_path, 'JPEG')
+        elif original_ext == 'png' and target_ext == 'jpg':
+            img = Image.open(filepath)
+            new_path = filepath.replace('.png', '.jpg')
+            img.convert('RGB').save(new_path)
+            return new_path
 
-def convert_docx_to_txt(input_path, output_path):
-    doc = Document(input_path)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join([p.text for p in doc.paragraphs]))
+        elif original_ext == 'jpg' and target_ext == 'png':
+            img = Image.open(filepath)
+            new_path = filepath.replace('.jpg', '.png')
+            img.save(new_path)
+            return new_path
 
-def convert_pdf_to_txt(input_path, output_path):
-    doc = fitz.open(input_path)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for page in doc:
-            f.write(page.get_text())
+        elif original_ext == 'png' and target_ext == 'pdf':
+            img = Image.open(filepath)
+            new_path = filepath.replace('.png', '.pdf')
+            img.convert('RGB').save(new_path, "PDF", resolution=100.0)
+            return new_path
 
-CONVERSION_FUNCTIONS = {
-    ('csv', 'xlsx'): convert_csv_to_xlsx,
-    ('xlsx', 'csv'): convert_xlsx_to_csv,
-    ('docx', 'txt'): convert_docx_to_txt,
-    ('jpg', 'pdf'): convert_image_to_pdf,
-    ('jpeg', 'pdf'): convert_image_to_pdf,
-    ('png', 'pdf'): convert_image_to_pdf,
-    ('png', 'jpg'): convert_image_to_jpg,
-    ('pdf', 'txt'): convert_pdf_to_txt,
-}
+        elif original_ext == 'docx' and target_ext == 'txt':
+            doc = Document(filepath)
+            text = "\n".join([p.text for p in doc.paragraphs])
+            new_path = filepath.replace('.docx', '.txt')
+            with open(new_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            return new_path
 
-@app.route('/')
+        elif original_ext == 'csv' and target_ext == 'txt':
+            df = pd.read_csv(filepath)
+            new_path = filepath.replace('.csv', '.txt')
+            df.to_string(open(new_path, 'w', encoding='utf-8'), index=False)
+            return new_path
+
+        elif original_ext == 'xlsx' and target_ext == 'txt':
+            df = pd.read_excel(filepath)
+            new_path = filepath.replace('.xlsx', '.txt')
+            df.to_string(open(new_path, 'w', encoding='utf-8'), index=False)
+            return new_path
+
+        else:
+            return None
+    except Exception as e:
+        print(f"[ERROR] 변환 중 오류 발생: {str(e)}")
+        return f"__ERROR__:{str(e)}"
+
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template("index.html")
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('파일이 없습니다.')
+            return redirect(request.url)
 
-@app.route('/get-targets')
-def get_targets():
-    ext = request.args.get('ext', '').lower()
-    return jsonify(EXTENSION_MAP.get(ext, []))
+        file = request.files['file']
+        if file.filename == '':
+            flash('선택된 파일이 없습니다.')
+            return redirect(request.url)
 
-@app.route('/convert', methods=['POST'])
-def convert():
-    file = request.files.get('file')
-    target_ext = request.form.get('target_ext', '').lower()
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            ext = filename.rsplit('.', 1)[-1].lower()
+            possible_targets = get_possible_conversions(ext)
 
-    if not file or target_ext == '':
-        return "파일과 변환 형식을 모두 선택해주세요.", 400
+            if not possible_targets:
+                flash(f'이 확장자({ext})는 변환을 지원하지 않습니다.')
+                return redirect(request.url)
 
-    orig_filename = secure_filename(file.filename)
-    src_ext = orig_filename.rsplit('.', 1)[-1].lower()
+            target_ext = request.form.get("target_ext")
+            if target_ext not in possible_targets:
+                flash(f'선택한 변환 확장자({target_ext})는 사용할 수 없습니다.')
+                return redirect(request.url)
 
-    if src_ext not in ALLOWED_EXTENSIONS:
-        return "지원되지 않는 파일 형식입니다.", 400
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(save_path)
 
-    if not allowed_file_mime(file.stream, orig_filename):
-        return "파일 내용과 확장자가 일치하지 않습니다.", 400
+            result_path = convert_file(save_path, ext, target_ext)
+            if result_path and not str(result_path).startswith("__ERROR__"):
+                return send_file(result_path, as_attachment=True)
+            else:
+                error_msg = result_path.split("__ERROR__:")[-1] if result_path else "알 수 없는 오류"
+                flash(f'변환 실패: {error_msg}')
+                return redirect(request.url)
+        else:
+            flash('허용되지 않는 파일 형식입니다.')
+            return redirect(request.url)
 
-    unique_id = uuid.uuid4().hex
-    filename = f"{os.path.splitext(orig_filename)[0]}_{unique_id}.{src_ext}"
-    src_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(src_path)
-
-    # Google Drive 업로드
-    try:
-        drive_url = upload_to_drive(src_path, filename, folder_id=GOOGLE_FOLDER_ID)
-    except Exception as e:
-        drive_url = None
-        print("[Drive 업로드 실패]", e)
-
-    if (src_ext, target_ext) not in CONVERSION_FUNCTIONS:
-        return f"변환 불가: {src_ext} → {target_ext} 변환 기능이 없습니다.", 400
-
-    output_filename = f"{os.path.splitext(orig_filename)[0]}_{unique_id}.{target_ext}"
-    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
-
-    try:
-        CONVERSION_FUNCTIONS[(src_ext, target_ext)](src_path, output_path)
-        if target_ext in ['txt', 'csv']:
-            with open(output_path, encoding='utf-8') as f:
-                content = f.read(3000)
-            return jsonify({
-                'preview': content,
-                'download_url': f"/download/{output_filename}",
-                'drive_url': drive_url
-            })
-        return send_file(output_path, as_attachment=True)
-    except Exception as e:
-        print("[ERROR] 변환 실패:", str(e))
-        traceback.print_exc()
-        return f"변환 실패: {str(e)}", 500
-
-@app.route('/download/<filename>')
-def download_file(filename):
-    path = os.path.join(UPLOAD_FOLDER, filename)
-    if os.path.exists(path):
-        return send_file(path, as_attachment=True)
-    return "파일이 존재하지 않습니다.", 404
+    return render_template('index.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
