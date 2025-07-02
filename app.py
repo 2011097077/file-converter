@@ -25,6 +25,14 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# 구글 애드센스 광고 관련 설정
+GOOGLE_ADS_CLIENT = "ca-pub-xxxxxxxxxxxxxxxx"  # 본인 애드센스 클라이언트 ID로 교체
+ADS_SLOTS = {
+    "left": "1111111111",    # 좌측 광고 단위 ID
+    "right": "2222222222",   # 우측 광고 단위 ID
+    "bottom": "3333333333"   # 하단 광고 단위 ID
+}
+
 def allowed_file(filename):
     ext = filename.rsplit('.', 1)[-1].lower()
     return '.' in filename and ext not in BLOCKED_EXTENSIONS
@@ -130,7 +138,10 @@ def index():
             flash('허용되지 않는 파일 형식입니다.')
             return redirect(request.url)
 
-    return render_template('index.html')
+    # GET 요청 시 광고 ID와 슬롯 정보 템플릿에 전달
+    return render_template('index.html',
+                           ads_client=GOOGLE_ADS_CLIENT,
+                           ads_slots=ADS_SLOTS)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
