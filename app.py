@@ -26,7 +26,7 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # 구글 애드센스 광고 관련 설정
-GOOGLE_ADS_CLIENT = "pub-2901016632257289"  # 본인 애드센스 클라이언트 ID로 교체
+GOOGLE_ADS_CLIENT = "ca-pub-2901016632257289"  # 본인 애드센스 클라이언트 ID로 교체
 ADS_SLOTS = {
     "left": "9180590057",    # 좌측 광고 단위 ID
     "right": "7216771695",   # 우측 광고 단위 ID
